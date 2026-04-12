@@ -31,7 +31,7 @@ ACMContactAllowedValidator::ACMContactAllowedValidator(tesseract::common::Allowe
 {
 }
 
-bool ACMContactAllowedValidator::operator()(LinkId link_id1, LinkId link_id2) const
+bool ACMContactAllowedValidator::operator()(const LinkId& link_id1, const LinkId& link_id2) const
 {
   return acm_.isCollisionAllowed(link_id1, link_id2);
 }
@@ -43,7 +43,7 @@ CombinedContactAllowedValidator::CombinedContactAllowedValidator(
 {
 }
 
-bool CombinedContactAllowedValidator::operator()(LinkId link_id1, LinkId link_id2) const
+bool CombinedContactAllowedValidator::operator()(const LinkId& link_id1, const LinkId& link_id2) const
 {
   assert(!validators_.empty());
   if (type_ == CombinedContactAllowedValidatorType::OR)
