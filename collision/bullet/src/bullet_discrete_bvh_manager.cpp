@@ -120,7 +120,7 @@ bool BulletDiscreteBVHManager::addCollisionObject(const std::string& name,
   if (new_cow != nullptr)
   {
     auto margin =
-        static_cast<btScalar>(contact_test_data_.collision_margin_data.getMaxCollisionMargin(new_cow->getName()));
+        static_cast<btScalar>(contact_test_data_.collision_margin_data.getMaxCollisionMargin(new_cow->getLinkId()));
     new_cow->setContactProcessingThreshold(margin);
     addCollisionObject(new_cow);
     return true;
@@ -361,7 +361,7 @@ void BulletDiscreteBVHManager::onCollisionMarginDataChanged()
   for (auto& co : link2cow_)
   {
     COW::Ptr& cow = co.second;
-    auto margin = static_cast<btScalar>(contact_test_data_.collision_margin_data.getMaxCollisionMargin(cow->getName()));
+    auto margin = static_cast<btScalar>(contact_test_data_.collision_margin_data.getMaxCollisionMargin(cow->getLinkId()));
     cow->setContactProcessingThreshold(margin);
     assert(cow->getBroadphaseHandle() != nullptr);
     updateBroadphaseAABB(cow, broadphase_, dispatcher_);
