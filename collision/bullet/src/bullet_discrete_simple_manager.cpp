@@ -190,6 +190,11 @@ void BulletDiscreteSimpleManager::setCollisionObjectsTransform(const tesseract::
     it->second->setWorldTransform(convertEigenToBt(pose));
 }
 
+Eigen::Isometry3d BulletDiscreteSimpleManager::getCollisionObjectsTransform(const tesseract::common::LinkId& id) const
+{
+  return convertBtToEigen(link2cow_.at(id)->getWorldTransform());
+}
+
 void BulletDiscreteSimpleManager::setCollisionObjectsTransform(const tesseract::common::LinkIdTransformMap& transforms)
 {
   for (const auto& [id, tf] : transforms)
@@ -314,6 +319,7 @@ void BulletDiscreteSimpleManager::contactTest(ContactResultMap& collisions, cons
 
       if (aabb_check)
       {
+        const tesseract::common::LinkIdPair link_pair(cow1->getLinkId(), cow2->getLinkId());
         bool needs_collision = needsCollisionCheck(*cow1, *cow2, contact_test_data_.validator, false);
 
         if (needs_collision)
@@ -327,8 +333,7 @@ void BulletDiscreteSimpleManager::contactTest(ContactResultMap& collisions, cons
           if (algorithm != nullptr)
           {
             // Update the contact threshold to be pair specific
-            cc.m_closestDistanceThreshold =
-                contact_test_data_.collision_margin_data.getCollisionMargin(cow1->getLinkId(), cow2->getLinkId());
+            cc.m_closestDistanceThreshold = contact_test_data_.collision_margin_data.getCollisionMargin(link_pair);
             TesseractBridgedManifoldResult contactPointResult(&obA, &obB, cc);
 
             // discrete collision detection query

@@ -35,6 +35,7 @@ TESSERACT_COMMON_IGNORE_WARNINGS_POP
 
 #include <tesseract/common/fwd.h>
 #include <tesseract/common/types.h>
+#include <tesseract/common/allowed_collision_matrix.h>
 
 #ifndef SWIG
 
@@ -360,12 +361,24 @@ public:
    */
   void addAllowedCollision(const common::LinkId& link_id1, const common::LinkId& link_id2, const std::string& reason);
 
+  /** @brief Add allowed collision; key already a LinkIdPair (avoids re-hashing names). */
+  void addAllowedCollision(const tesseract::common::LinkIdPair& pair, const tesseract::common::ACMEntry& entry);
+
   /**
    * @brief Remove disabled collision pair from allowed collision matrix
    * @param link_name1 Collision object name
    * @param link_name2 Collision object name
    */
   void removeAllowedCollision(const common::LinkId& link_id1, const common::LinkId& link_id2);
+
+  /**
+   * @brief Remove disabled collision pair using a pre-built canonical pair.
+   * @details Forwarder to @ref tesseract::common::AllowedCollisionMatrix::removeAllowedCollision(const LinkIdPair&).
+   *          Useful when iterating an existing ACM and erasing by key without reconstructing
+   *          @ref LinkId objects from strings.
+   * @param pair Canonically ordered link-id pair (the map key)
+   */
+  void removeAllowedCollision(const tesseract::common::LinkIdPair& pair);
 
   /**
    * @brief Remove disabled collision for any pair with link_name from allowed collision matrix

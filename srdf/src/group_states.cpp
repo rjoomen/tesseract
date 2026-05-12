@@ -56,7 +56,7 @@ GroupJointStates parseGroupStates(const tesseract::scene_graph::SceneGraph& scen
       std::throw_with_nested(
           std::runtime_error("GroupStates: Failed to parse attribute 'name' for group '" + group_name + "'!"));
 
-    bool found = std::find(group_names.begin(), group_names.end(), group_name) != group_names.end();
+    bool found = group_names.find(group_name) != group_names.end();
     if (!found)
       std::throw_with_nested(std::runtime_error(tesseract::common::strFormat(
           "GroupStates: State '%s' group '%s' does not exist!", state_name.c_str(), group_name.c_str())));
@@ -80,7 +80,7 @@ GroupJointStates parseGroupStates(const tesseract::scene_graph::SceneGraph& scen
                                                                                group_name.c_str())));
       auto joint_id = tesseract::common::JointId(joint_name);
 
-      if (!isRegisteredJoint(scene_graph, joint_name))
+      if (!isRegisteredJoint(scene_graph, joint_id))
         std::throw_with_nested(std::runtime_error(tesseract::common::strFormat("GroupStates: State '%s' for group '%s' "
                                                                                "joint name '%s' is not know to the "
                                                                                "URDF!",

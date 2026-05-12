@@ -773,10 +773,18 @@ void SceneGraph::addAllowedCollision(const common::LinkId& link_id1,
   acm_->addAllowedCollision(link_id1, link_id2, reason);
 }
 
+void SceneGraph::addAllowedCollision(const tesseract::common::LinkIdPair& pair,
+                                     const tesseract::common::ACMEntry& entry)
+{
+  acm_->addAllowedCollision(pair, entry);
+}
+
 void SceneGraph::removeAllowedCollision(const common::LinkId& link_id1, const common::LinkId& link_id2)
 {
   acm_->removeAllowedCollision(link_id1, link_id2);
 }
+
+void SceneGraph::removeAllowedCollision(const tesseract::common::LinkIdPair& pair) { acm_->removeAllowedCollision(pair); }
 
 void SceneGraph::removeAllowedCollision(const common::LinkId& link_id) { acm_->removeAllowedCollision(link_id); }
 
@@ -1201,8 +1209,10 @@ bool SceneGraph::insertSceneGraph(const tesseract::scene_graph::SceneGraph& scen
   acm_->insertAllowedCollisionMatrix(*clone_prefix(scene_graph.getAllowedCollisionMatrix(), prefix));
 
   // If the this graph was empty to start we will set the root link to the same as the inserted one.
+  // When a prefix is given every link was stored under LinkId(prefix + name), so we must use the
+  // prefixed id here too; the un-prefixed id is not in link_map_ and setRoot() would silently fail.
   if (is_empty)
-    setRoot(scene_graph.getRoot());
+    setRoot(prefix.empty() ? scene_graph.getRoot() : LinkId(prefix + scene_graph.getRoot().name()));
 
   return true;
 }
