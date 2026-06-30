@@ -42,11 +42,30 @@ TESSERACT_COMMON_IGNORE_WARNINGS_POP
 #include <tesseract/common/utils.h>
 
 #include <mutex>
+#include <stdexcept>
+#include <string>
 
 namespace tesseract::scene_graph
 {
 using tesseract::common::JointId;
 using tesseract::common::LinkId;
+
+/** @brief Throws std::runtime_error naming the offending floating-joint id when overlaying user-supplied
+ *         values onto @p target, instead of letting bare .at() throw a context-free std::out_of_range.
+ */
+static void overlayFloatingJointsOrThrow(tesseract::common::JointIdTransformMap& target,
+                                         const tesseract::common::JointIdTransformMap& source,
+                                         const char* call_site)
+{
+  for (const auto& [joint_id, transform] : source)
+  {
+    auto it = target.find(joint_id);
+    if (it == target.end())
+      throw std::runtime_error(std::string(call_site) + ": floating-joint id '" + joint_id.name() +
+                               "' is not registered with this scene");
+    it->second = transform;
+  }
+}
 
 /** @brief Every time a vertex is visited for the first time add a new node to the tree */
 struct ofkt_builder : public boost::dfs_visitor<>
@@ -270,11 +289,9 @@ void OFKTStateSolver::setState(const tesseract::common::JointIdTransformMap& flo
 
 void OFKTStateSolver::applyFloatingAndUpdate(const tesseract::common::JointIdTransformMap& floating_joint_values)
 {
+  overlayFloatingJointsOrThrow(current_state_.floating_joints, floating_joint_values, "OFKTStateSolver::setState");
   for (const auto& [joint_id, transform] : floating_joint_values)
-  {
-    current_state_.floating_joints.at(joint_id) = transform;
     nodes_[joint_id]->setStaticTransformation(transform);
-  }
 
   update(root_.get(), false);
 }
@@ -290,8 +307,7 @@ SceneState OFKTStateSolver::getState(const Eigen::Ref<const Eigen::VectorXd>& jo
   for (std::size_t i = 0; i < active_joint_ids_.size(); ++i)
     state.joints[active_joint_ids_[i]] = joint_values[static_cast<long>(i)];
 
-  for (const auto& [joint_id, transform] : floating_joint_values)
-    state.floating_joints.at(joint_id) = transform;
+  overlayFloatingJointsOrThrow(state.floating_joints, floating_joint_values, "OFKTStateSolver::getState");
 
   update(state, root_.get(), parent_frame, false);
   return state;
@@ -331,8 +347,7 @@ SceneState OFKTStateSolver::getStateUnlocked(const SceneState::JointValues& join
   for (const auto& [joint_id, value] : joint_values)
     state.joints[joint_id] = value;
 
-  for (const auto& [joint_id, transform] : floating_joint_values)
-    state.floating_joints.at(joint_id) = transform;
+  overlayFloatingJointsOrThrow(state.floating_joints, floating_joint_values, "OFKTStateSolver::getState");
 
   update(state, root_.get(), parent_frame, false);
   return state;
@@ -358,8 +373,7 @@ void OFKTStateSolver::getLinkTransforms(tesseract::common::LinkIdTransformMap& l
     joints[joint_ids[i]] = joint_values[static_cast<long>(i)];
 
   tesseract::common::JointIdTransformMap floating_joints{ current_state_.floating_joints };
-  for (const auto& [joint_id, transform] : floating_joint_values)
-    floating_joints.at(joint_id) = transform;
+  overlayFloatingJointsOrThrow(floating_joints, floating_joint_values, "OFKTStateSolver::getLinkTransforms");
 
   link_transforms = current_state_.link_transforms;
   update(link_transforms, joints, floating_joints, root_.get(), parent_frame, false);
@@ -406,8 +420,7 @@ Eigen::MatrixXd OFKTStateSolver::getJacobian(const Eigen::Ref<const Eigen::Vecto
     joints[active_joint_ids_[static_cast<std::size_t>(i)]] = joint_values[i];
 
   tesseract::common::JointIdTransformMap floating_joints{ current_state_.floating_joints };
-  for (const auto& [joint_id, transform] : floating_joint_values)
-    floating_joints.at(joint_id) = transform;
+  overlayFloatingJointsOrThrow(floating_joints, floating_joint_values, "OFKTStateSolver::getJacobian");
 
   return calcJacobianHelper(joints, link_id, floating_joints);
 }
@@ -423,8 +436,7 @@ Eigen::MatrixXd OFKTStateSolver::getJacobian(const std::vector<JointId>& joint_i
     joints[joint_ids[i]] = joint_values[static_cast<Eigen::Index>(i)];
 
   tesseract::common::JointIdTransformMap floating_joints{ current_state_.floating_joints };
-  for (const auto& [joint_id, transform] : floating_joint_values)
-    floating_joints.at(joint_id) = transform;
+  overlayFloatingJointsOrThrow(floating_joints, floating_joint_values, "OFKTStateSolver::getJacobian");
 
   return calcJacobianHelper(joints, link_id, floating_joints);
 }
@@ -446,7 +458,11 @@ OFKTStateSolver::calcJacobianHelper(const SceneState::JointValues& joints,
     }
     else if (node->getType() == JointType::FLOATING)
     {
-      total_tf = floating_joint_values.at(node->getJointId()) * total_tf;
+      auto fj_it = floating_joint_values.find(node->getJointId());
+      if (fj_it == floating_joint_values.end())
+        throw std::runtime_error("OFKTStateSolver: internal inconsistency - FLOATING node '" +
+                                 node->getJointId().name() + "' has no entry in floating_joints map");
+      total_tf = fj_it->second * total_tf;
     }
     else
     {
@@ -519,10 +535,21 @@ std::vector<LinkId> OFKTStateSolver::getStaticLinkIds() const
 bool OFKTStateSolver::isActiveLinkId(const tesseract::common::LinkId& link_id) const
 {
   std::shared_lock<std::shared_mutex> lock(mutex_);
-  std::vector<LinkId> ids;
-  ids.reserve(nodes_.size());
-  loadActiveLinkIdsRecursive(ids, root_.get(), false);
-  return std::find(ids.begin(), ids.end(), link_id) != ids.end();
+  auto it = link_map_.find(link_id);
+  if (it == link_map_.end())
+    return false;
+
+  // A link is active iff itself or some ancestor has a non-FIXED, non-FLOATING parent
+  // joint — equivalent to loadActiveLinkIdsRecursive's downward propagation but cheaper:
+  // O(depth) walk vs O(n) traversal + O(n) std::find on every call. Stateless, so no
+  // cache-invalidation surface to maintain on scene mutations.
+  for (const OFKTNode* node = it->second; node != nullptr; node = node->getParent())
+  {
+    const auto t = node->getType();
+    if (t != tesseract::scene_graph::JointType::FIXED && t != tesseract::scene_graph::JointType::FLOATING)
+      return true;
+  }
+  return false;
 }
 
 bool OFKTStateSolver::hasLinkId(const tesseract::common::LinkId& link_id) const
@@ -963,7 +990,11 @@ bool OFKTStateSolver::updateRequired(Eigen::Isometry3d& updated_parent_world_tf,
 
   if (node->getType() == tesseract::scene_graph::JointType::FLOATING)
   {
-    const auto& tf = floating_joints.at(node->getJointId());
+    auto it = floating_joints.find(node->getJointId());
+    if (it == floating_joints.end())
+      throw std::runtime_error("OFKTStateSolver: internal inconsistency - FLOATING node '" +
+                               node->getJointId().name() + "' has no entry in floating_joints map");
+    const auto& tf = it->second;
     updated_parent_world_tf = parent_world_tf * tf;
     return (!tf.isApprox(node->getLocalTransformation(), 1e-8));
   }

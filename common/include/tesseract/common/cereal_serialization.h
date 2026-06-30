@@ -42,22 +42,9 @@ void load_minimal(const Archive&, NameId<Tag>& id, const std::string& value)
   id = NameId<Tag>(value);
 }
 
-template <class Archive, typename Tag>
-void save(Archive& ar, const OrderedIdPair<Tag>& pair)
-{
-  ar(cereal::make_nvp("first_id", pair.first_id()));
-  ar(cereal::make_nvp("second_id", pair.second_id()));
-}
-
-template <class Archive, typename Tag>
-void load(Archive& ar, OrderedIdPair<Tag>& pair)
-{
-  NameIdValue first_id = 0;
-  NameIdValue second_id = 0;
-  ar(cereal::make_nvp("first_id", first_id));
-  ar(cereal::make_nvp("second_id", second_id));
-  pair = OrderedIdPair<Tag>(first_id, second_id);
-}
+// OrderedIdPair has no cereal specialization on purpose — its NameIdValue ids are
+// not stable across builds. Serialize wrapping structs (ContactResult, ACMEntry,
+// PairMarginEntry) using their name-bearing fields and rebuild the pair on load.
 
 template <class Archive, class T>
 void serialize(Archive& ar, AnyWrapper<T>& obj)
@@ -145,6 +132,7 @@ void serialize(Archive& ar, CombinedContactAllowedValidator& obj)
 template <class Archive>
 void serialize(Archive& ar, JointState& obj)
 {
+  // NVP key kept as "joint_names" for archive compat with master; field was renamed to joint_ids during Id migration.
   ar(cereal::make_nvp("joint_names", obj.joint_ids));
   ar(cereal::make_nvp("position", obj.position));
   ar(cereal::make_nvp("velocity", obj.velocity));

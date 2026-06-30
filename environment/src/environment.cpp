@@ -779,8 +779,7 @@ std::vector<std::string> Environment::Implementation::getGroupJointNames(const s
 std::vector<tesseract::common::JointId>
 Environment::Implementation::getGroupJointIds(const std::string& group_name) const
 {
-  auto it = std::find(kinematics_information.group_names.begin(), kinematics_information.group_names.end(), group_name);
-  if (it == kinematics_information.group_names.end())
+  if (kinematics_information.group_names.find(group_name) == kinematics_information.group_names.end())
     throw std::runtime_error("Environment, Joint group '" + group_name + "' does not exist!");
 
   std::unique_lock<std::shared_mutex> cache_lock(group_joint_names_cache_mutex);
@@ -1874,7 +1873,7 @@ bool Environment::Implementation::applyModifyAllowedCollisionsCommand(
     case ModifyAllowedCollisionsType::REMOVE:
     {
       for (const auto& [key, entry] : cmd->getAllowedCollisionMatrix().getAllAllowedCollisions())
-        scene_graph->removeAllowedCollision(common::LinkId(entry.name1), common::LinkId(entry.name2));
+        scene_graph->removeAllowedCollision(key);
 
       break;
     }
@@ -1882,13 +1881,13 @@ bool Environment::Implementation::applyModifyAllowedCollisionsCommand(
     {
       scene_graph->clearAllowedCollisions();
       for (const auto& [key, entry] : cmd->getAllowedCollisionMatrix().getAllAllowedCollisions())
-        scene_graph->addAllowedCollision(common::LinkId(entry.name1), common::LinkId(entry.name2), entry.reason);
+        scene_graph->addAllowedCollision(key, entry);
       break;
     }
     case ModifyAllowedCollisionsType::ADD:
     {
       for (const auto& [key, entry] : cmd->getAllowedCollisionMatrix().getAllAllowedCollisions())
-        scene_graph->addAllowedCollision(common::LinkId(entry.name1), common::LinkId(entry.name2), entry.reason);
+        scene_graph->addAllowedCollision(key, entry);
 
       break;
     }
@@ -2864,7 +2863,8 @@ Environment::getActiveLinkIds(const std::vector<tesseract::common::JointId>& joi
 std::vector<std::string> Environment::getActiveLinkNames(const std::vector<std::string>& joint_names) const
 {
   std::shared_lock<std::shared_mutex> lock(mutex_);
-  return common::toNames(getActiveLinkIds(tesseract::common::toIds<common::JointId>(joint_names)));
+  return common::toNames(std::as_const<Implementation>(*impl_).scene_graph->getJointChildrenIds(
+      tesseract::common::toIds<common::JointId>(joint_names)));
 }
 
 std::vector<std::string> Environment::getStaticLinkNames() const

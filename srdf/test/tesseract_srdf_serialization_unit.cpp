@@ -23,11 +23,15 @@
 #include <tesseract/common/macros.h>
 TESSERACT_COMMON_IGNORE_WARNINGS_PUSH
 #include <gtest/gtest.h>
+#include <sstream>
 TESSERACT_COMMON_IGNORE_WARNINGS_POP
 
+#include <tesseract/common/calibration_info.h>
+#include <tesseract/common/collision_margin_data.h>
 #include <tesseract/common/resource_locator.h>
 #include <tesseract/common/serialization.h>
 #include <tesseract/common/unit_test_utils.h>
+#include <cereal/archives/json.hpp>
 #include <tesseract/common/utils.h>
 #include <tesseract/srdf/kinematics_information.h>
 #include <tesseract/srdf/srdf_model.h>
@@ -154,6 +158,44 @@ TEST(TesseractSRDFSerializeUnit, SRDFModel)  // NOLINT
   auto srdf = getSRDFModel(graph, locator);
 
   tesseract::common::testSerialization<SRDFModel>(*srdf, "SRDFModel");
+}
+
+TEST(TesseractSRDFSerializeUnit, SRDFModelJsonRoundTripPerField)  // NOLINT
+{
+  GeneralResourceLocator locator;
+  auto graph = getSceneGraph();
+  auto srdf = getSRDFModel(graph, locator);
+
+  // Populate collision_margin_data and calibration_info — the SRDF fixture leaves both empty,
+  // and per-field round-trip coverage requires non-default values for every member.
+  srdf->collision_margin_data = std::make_shared<tesseract::common::CollisionMarginData>(0.05);
+  srdf->collision_margin_data->setCollisionMargin(LinkId("link_1"), LinkId("link_2"), 0.01);
+  srdf->collision_margin_data->setCollisionMargin(LinkId("link_3"), LinkId("link_4"), 0.02);
+
+  Eigen::Isometry3d cal_tf = Eigen::Isometry3d::Identity();
+  cal_tf.translation() = Eigen::Vector3d(0.1, 0.2, 0.3);
+  srdf->calibration_info.joints[JointId("joint_a2")] = cal_tf;
+
+  std::stringstream ss;
+  {
+    cereal::JSONOutputArchive ar(ss);
+    ar(*srdf);
+  }
+  SRDFModel loaded;
+  {
+    cereal::JSONInputArchive ar(ss);
+    ar(loaded);
+  }
+
+  EXPECT_EQ(loaded.name, srdf->name);
+  EXPECT_EQ(loaded.version, srdf->version);
+  EXPECT_EQ(loaded.kinematics_information, srdf->kinematics_information);
+  EXPECT_EQ(loaded.contact_managers_plugin_info, srdf->contact_managers_plugin_info);
+  EXPECT_EQ(loaded.acm, srdf->acm);
+  ASSERT_NE(srdf->collision_margin_data, nullptr);
+  ASSERT_NE(loaded.collision_margin_data, nullptr);
+  EXPECT_EQ(*loaded.collision_margin_data, *srdf->collision_margin_data);
+  EXPECT_EQ(loaded.calibration_info, srdf->calibration_info);
 }
 
 int main(int argc, char** argv)
