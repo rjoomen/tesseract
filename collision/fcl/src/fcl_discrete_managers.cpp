@@ -37,6 +37,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <algorithm>
 #include <cassert>
 #include <stdexcept>
 #include <string>
@@ -70,9 +71,11 @@ DiscreteContactManager::UPtr FCLDiscreteBVHManager::clone() const
   for (const auto& id : collision_objects_)
     cows.push_back(link2cow_.at(id)->clone());
 
-  // The refit is not deferred to the setActiveCollisionObjects below: that call's filter pass moves objects
-  // between the two trees, and the shape it leaves them in decides broadphase traversal order, which a clone
-  // has to reproduce from its source.
+  // The refit is not deferred to the setActiveCollisionObjects below. Deferring it changes the contact this
+  // manager reports: the clone then returns the two small off-axis components of the contact normal with the
+  // opposite sign to its source, 1.7e-3 and 3.0e-3 apart against the clone suite's 1e-3 tolerance, while the
+  // distance, the nearest points and the dominant normal component all still agree. The order the objects are
+  // reported in is not what is at stake here - that survives either way.
   manager->addCollisionObjects(cows, /*defer_update=*/false);
 
   manager->setActiveCollisionObjects(active_);
@@ -106,14 +109,22 @@ bool FCLDiscreteBVHManager::addCollisionObjects(const std::vector<CollisionObjec
   std::vector<COW::Ptr> cows;
   cows.reserve(objects.size());
 
-  // Collapse a repeated id within the batch, last spec winning, which is what a per-object loop produces.
-  // The primitive's @pre makes this the caller's job.
+  // Reproduce the per-id semantics of adding the specs one at a time: a repeated id displaces its earlier entry,
+  // so the last spec naming an id decides both the wrapper and its position.
   std::unordered_map<tesseract::common::LinkId, std::size_t> batch_index;
   batch_index.reserve(objects.size());
 
   bool success{ true };
   for (const auto& obj : objects)
   {
+    // The hole is compacted away below rather than erased here, which would be O(n) per repeat.
+    const auto it = batch_index.find(obj.id);
+    if (it != batch_index.end())
+    {
+      cows[it->second] = nullptr;
+      batch_index.erase(it);
+    }
+
     const COW::Ptr new_cow = createFCLCollisionObject(obj.id, obj.mask_id, obj.shapes, obj.shape_poses, obj.enabled);
     if (new_cow == nullptr)
     {
@@ -121,22 +132,20 @@ bool FCLDiscreteBVHManager::addCollisionObjects(const std::vector<CollisionObjec
       continue;
     }
 
-    const auto it = batch_index.find(obj.id);
-    if (it != batch_index.end())
-      cows[it->second] = new_cow;
-    else
-    {
-      batch_index[obj.id] = cows.size();
-      cows.push_back(new_cow);
-    }
+    batch_index[obj.id] = cows.size();
+    cows.push_back(new_cow);
   }
 
+  cows.erase(std::remove(cows.begin(), cows.end(), nullptr), cows.end());
+
   // The primitive does not displace an already-registered object, so do here what the single-object entry point
-  // does. Skipping this orphans the old object's broadphase proxy.
-  for (const auto& cow : cows)
+  // does. Skipping this orphans the old object's broadphase proxy. Every id the batch names is removed, including
+  // one whose spec failed to build: the single-object form removes before it creates, so a failed spec leaves that
+  // id unregistered.
+  for (const auto& obj : objects)
   {
-    if (link2cow_.find(cow->getLinkId()) != link2cow_.end())
-      removeCollisionObject(cow->getLinkId());
+    if (link2cow_.find(obj.id) != link2cow_.end())
+      removeCollisionObject(obj.id);
   }
 
   if (!cows.empty())

@@ -972,9 +972,10 @@ Environment::Implementation::getDiscreteContactManagerHelper(const std::string& 
   manager->setContactAllowedValidator(contact_allowed_validator);
   if (scene_graph != nullptr)
   {
+    const auto links = scene_graph->getLinks();
     std::vector<tesseract::collision::CollisionObjectSpec> objects;
-    objects.reserve(scene_graph->getLinks().size());
-    for (const auto& link : scene_graph->getLinks())
+    objects.reserve(links.size());
+    for (const auto& link : links)
     {
       if (!link->collision.empty())
       {
@@ -1009,9 +1010,10 @@ Environment::Implementation::getContinuousContactManagerHelper(const std::string
   manager->setContactAllowedValidator(contact_allowed_validator);
   if (scene_graph != nullptr)
   {
+    const auto links = scene_graph->getLinks();
     std::vector<tesseract::collision::CollisionObjectSpec> objects;
-    objects.reserve(scene_graph->getLinks().size());
-    for (const auto& link : scene_graph->getLinks())
+    objects.reserve(links.size());
+    for (const auto& link : links)
     {
       if (!link->collision.empty())
       {

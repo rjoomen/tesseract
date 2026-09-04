@@ -86,6 +86,13 @@ public:
 
   /**
    * @brief Add a batch of collision objects, applying one broadphase update for the batch
+   *
+   * Observably equivalent to calling addCollisionObject once per entry, in order. A false return still leaves
+   * every object that was added registered; only the failing ones are absent. Within one batch a repeated id
+   * behaves as the repeated single calls do: the last entry naming that id decides both the object and its
+   * position in getCollisionObjects(), and if that last entry fails the id is left unregistered even when an
+   * earlier entry for it succeeded.
+   *
    * @param objects The objects to add
    * @return False if any object failed to be added
    */
