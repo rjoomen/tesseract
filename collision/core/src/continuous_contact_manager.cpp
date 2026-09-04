@@ -24,10 +24,57 @@
 
 #include <tesseract/collision/continuous_contact_manager.h>
 #include <tesseract/collision/utils.h>
+#include <tesseract/common/macros.h>
 #include <tesseract/common/types.h>
 
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
+#include <vector>
+
+namespace
+{
+/**
+ * @brief Look up a link's transform
+ * @throws std::out_of_range naming the link if it is absent
+ */
+const Eigen::Isometry3d& lookup(const tesseract::common::LinkIdTransformMap& state, const tesseract::common::LinkId& id)
+{
+  auto it = state.find(id);
+  if (it == state.end())
+    throw std::out_of_range("setCollisionObjectsTransform, link '" + id.name() + "' is absent from the state");
+
+  return it->second;
+}
+
+template <typename IdRange>
+void gather(const IdRange& ids,
+            const tesseract::common::LinkIdTransformMap& state,
+            std::vector<tesseract::common::LinkId>& out_ids,
+            tesseract::common::VectorIsometry3d& out_poses)
+{
+  out_ids.clear();
+  out_poses.clear();
+  out_ids.reserve(ids.size());
+  out_poses.reserve(ids.size());
+  for (const auto& id : ids)
+  {
+    out_ids.push_back(id);
+    out_poses.push_back(lookup(state, id));
+  }
+}
+
+/** @brief Look up @p ids (already gathered) against a second state map, in the same order */
+void gatherPoses(const std::vector<tesseract::common::LinkId>& ids,
+                 const tesseract::common::LinkIdTransformMap& state,
+                 tesseract::common::VectorIsometry3d& out_poses)
+{
+  out_poses.clear();
+  out_poses.reserve(ids.size());
+  for (const auto& id : ids)
+    out_poses.push_back(lookup(state, id));
+}
+}  // namespace
 
 namespace tesseract::collision
 {
@@ -53,6 +100,54 @@ void ContinuousContactManager::setCollisionObjectsTransform(const std::vector<te
 
   for (std::size_t i = 0; i < ids.size(); ++i)
     setCollisionObjectsTransform(ids[i], pose1[i], pose2[i]);
+}
+
+// The scratch buffers below are live only for the duration of the forwarded call, which must not re-enter: a
+// backend override that called back into one of these (ids, map) overloads on the same thread would clear the
+// buffers out from under the call in progress.
+void ContinuousContactManager::setCollisionObjectsTransform(const std::unordered_set<tesseract::common::LinkId>& ids,
+                                                            const tesseract::common::LinkIdTransformMap& state)
+{
+  TESSERACT_THREAD_LOCAL std::vector<tesseract::common::LinkId> scratch_ids;
+  TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses;
+  gather(ids, state, scratch_ids, scratch_poses);
+  setCollisionObjectsTransform(scratch_ids, scratch_poses);
+}
+
+void ContinuousContactManager::setCollisionObjectsTransform(const std::vector<tesseract::common::LinkId>& ids,
+                                                            const tesseract::common::LinkIdTransformMap& state)
+{
+  TESSERACT_THREAD_LOCAL std::vector<tesseract::common::LinkId> scratch_ids;
+  TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses;
+  gather(ids, state, scratch_ids, scratch_poses);
+  setCollisionObjectsTransform(scratch_ids, scratch_poses);
+}
+
+// The scratch buffers below are live only for the duration of the forwarded call, which must not re-enter: a
+// backend override that called back into one of these (ids, map) overloads on the same thread would clear the
+// buffers out from under the call in progress.
+void ContinuousContactManager::setCollisionObjectsTransform(const std::unordered_set<tesseract::common::LinkId>& ids,
+                                                            const tesseract::common::LinkIdTransformMap& state0,
+                                                            const tesseract::common::LinkIdTransformMap& state1)
+{
+  TESSERACT_THREAD_LOCAL std::vector<tesseract::common::LinkId> scratch_ids;
+  TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses0;
+  TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses1;
+  gather(ids, state0, scratch_ids, scratch_poses0);
+  gatherPoses(scratch_ids, state1, scratch_poses1);
+  setCollisionObjectsTransform(scratch_ids, scratch_poses0, scratch_poses1);
+}
+
+void ContinuousContactManager::setCollisionObjectsTransform(const std::vector<tesseract::common::LinkId>& ids,
+                                                            const tesseract::common::LinkIdTransformMap& state0,
+                                                            const tesseract::common::LinkIdTransformMap& state1)
+{
+  TESSERACT_THREAD_LOCAL std::vector<tesseract::common::LinkId> scratch_ids;
+  TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses0;
+  TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses1;
+  gather(ids, state0, scratch_ids, scratch_poses0);
+  gatherPoses(scratch_ids, state1, scratch_poses1);
+  setCollisionObjectsTransform(scratch_ids, scratch_poses0, scratch_poses1);
 }
 
 void ContinuousContactManager::setActiveCollisionObjects(const std::vector<tesseract::common::LinkId>& ids)
