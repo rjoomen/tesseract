@@ -40,6 +40,8 @@
 #include <cassert>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
+#include <vector>
 #include <tesseract/collision/fcl/fcl_discrete_managers.h>
 #include <tesseract/common/contact_allowed_validator.h>
 
@@ -63,8 +65,15 @@ DiscreteContactManager::UPtr FCLDiscreteBVHManager::clone() const
 {
   auto manager = std::make_unique<FCLDiscreteBVHManager>();
 
+  std::vector<COW::Ptr> cows;
+  cows.reserve(collision_objects_.size());
   for (const auto& id : collision_objects_)
-    manager->addCollisionObject(link2cow_.at(id)->clone());
+    cows.push_back(link2cow_.at(id)->clone());
+
+  // The refit is not deferred to the setActiveCollisionObjects below: that call's filter pass moves objects
+  // between the two trees, and the shape it leaves them in decides broadphase traversal order, which a clone
+  // has to reproduce from its source.
+  manager->addCollisionObjects(cows, /*defer_update=*/false);
 
   manager->setActiveCollisionObjects(active_);
   manager->setCollisionMarginData(collision_margin_data_);
@@ -90,6 +99,50 @@ bool FCLDiscreteBVHManager::addCollisionObject(const tesseract::common::LinkId& 
   }
 
   return false;
+}
+
+bool FCLDiscreteBVHManager::addCollisionObjects(const std::vector<CollisionObjectSpec>& objects)
+{
+  std::vector<COW::Ptr> cows;
+  cows.reserve(objects.size());
+
+  // Collapse a repeated id within the batch, last spec winning, which is what a per-object loop produces.
+  // The primitive's @pre makes this the caller's job.
+  std::unordered_map<tesseract::common::LinkId, std::size_t> batch_index;
+  batch_index.reserve(objects.size());
+
+  bool success{ true };
+  for (const auto& obj : objects)
+  {
+    const COW::Ptr new_cow = createFCLCollisionObject(obj.id, obj.mask_id, obj.shapes, obj.shape_poses, obj.enabled);
+    if (new_cow == nullptr)
+    {
+      success = false;
+      continue;
+    }
+
+    const auto it = batch_index.find(obj.id);
+    if (it != batch_index.end())
+      cows[it->second] = new_cow;
+    else
+    {
+      batch_index[obj.id] = cows.size();
+      cows.push_back(new_cow);
+    }
+  }
+
+  // The primitive does not displace an already-registered object, so do here what the single-object entry point
+  // does. Skipping this orphans the old object's broadphase proxy.
+  for (const auto& cow : cows)
+  {
+    if (link2cow_.find(cow->getLinkId()) != link2cow_.end())
+      removeCollisionObject(cow->getLinkId());
+  }
+
+  if (!cows.empty())
+    addCollisionObjects(cows, /*defer_update=*/false);
+
+  return success;
 }
 
 const CollisionShapesConst&
@@ -374,33 +427,45 @@ void FCLDiscreteBVHManager::contactTest(ContactResultMap& collisions, const Cont
 
 void FCLDiscreteBVHManager::addCollisionObject(const COW::Ptr& cow)
 {
-  std::size_t cnt = cow->getCollisionObjectsRaw().size();
-  fcl_co_count_ += cnt;
+  addCollisionObjects(std::vector<COW::Ptr>{ cow });
+}
+
+void FCLDiscreteBVHManager::addCollisionObjects(const std::vector<COW::Ptr>& cows, bool defer_update)
+{
+  for (const auto& cow : cows)
+  {
+    const std::size_t cnt = cow->getCollisionObjectsRaw().size();
+    fcl_co_count_ += cnt;
+    link2cow_[cow->getLinkId()] = cow;
+    collision_objects_.push_back(cow->getLinkId());
+
+    std::vector<CollisionObjectPtr>& objects = cow->getCollisionObjects();
+    if (cow->m_collisionFilterGroup == CollisionFilterGroups::StaticFilter)
+    {
+      // If static add to static manager
+      for (auto& co : objects)
+        static_manager_->registerObject(co.get());
+    }
+    else
+    {
+      for (auto& co : objects)
+        dynamic_manager_->registerObject(co.get());
+    }
+
+    // If active links is not empty update filters to replace the active links list
+    if (!active_.empty())
+      updateCollisionObjectFilters(active_, cow, static_manager_, dynamic_manager_);
+  }
+
   static_update_.reserve(fcl_co_count_);
   dynamic_update_.reserve(fcl_co_count_);
-  link2cow_[cow->getLinkId()] = cow;
-  collision_objects_.push_back(cow->getLinkId());
 
-  std::vector<CollisionObjectPtr>& objects = cow->getCollisionObjects();
-  if (cow->m_collisionFilterGroup == CollisionFilterGroups::StaticFilter)
+  if (!defer_update)
   {
-    // If static add to static manager
-    for (auto& co : objects)
-      static_manager_->registerObject(co.get());
+    // This causes a refit on the bvh tree.
+    dynamic_manager_->update();
+    static_manager_->update();
   }
-  else
-  {
-    for (auto& co : objects)
-      dynamic_manager_->registerObject(co.get());
-  }
-
-  // If active links is not empty update filters to replace the active links list
-  if (!active_.empty())
-    updateCollisionObjectFilters(active_, cow, static_manager_, dynamic_manager_);
-
-  // This causes a refit on the bvh tree.
-  dynamic_manager_->update();
-  static_manager_->update();
 }
 
 void FCLDiscreteBVHManager::onCollisionMarginDataChanged()

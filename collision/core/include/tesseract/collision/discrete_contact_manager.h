@@ -85,6 +85,13 @@ public:
                                   bool enabled = true) = 0;
 
   /**
+   * @brief Add a batch of collision objects, applying one broadphase update for the batch
+   * @param objects The objects to add
+   * @return False if any object failed to be added
+   */
+  virtual bool addCollisionObjects(const std::vector<CollisionObjectSpec>& objects);
+
+  /**
    * @brief Get a collision objects collision geometries
    * @param id The collision object's LinkId
    * @return A vector of collision geometries. The vector will be empty if the collision object is not found.
