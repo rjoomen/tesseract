@@ -650,13 +650,25 @@ void Environment::Implementation::currentStateChanged()
   if (continuous_manager != nullptr)
   {
     const std::vector<tesseract::common::LinkId> active_link_ids = state_solver->getActiveLinkIds();
+
+    std::vector<tesseract::common::LinkId> cast_ids;
+    std::vector<tesseract::common::LinkId> static_ids;
+    cast_ids.reserve(active_link_ids.size());
+    static_ids.reserve(current_state.link_transforms.size() > active_link_ids.size() ?
+                           current_state.link_transforms.size() - active_link_ids.size() :
+                           0U);
+
     for (const auto& [id, tf] : current_state.link_transforms)
     {
       if (std::find(active_link_ids.begin(), active_link_ids.end(), id) != active_link_ids.end())
-        continuous_manager->setCollisionObjectsTransform(id, tf, tf);
+        cast_ids.push_back(id);
       else
-        continuous_manager->setCollisionObjectsTransform(id, tf);
+        static_ids.push_back(id);
     }
+
+    continuous_manager->setCollisionObjectsTransform(static_ids, current_state.link_transforms);
+    continuous_manager->setCollisionObjectsTransform(
+        cast_ids, current_state.link_transforms, current_state.link_transforms);
   }
 
   {  // Clear JointGroup and KinematicGroup
@@ -1010,13 +1022,24 @@ Environment::Implementation::getContinuousContactManagerHelper(const std::string
   manager->setCollisionMarginData(collision_margin_data);
 
   const std::vector<tesseract::common::LinkId> active_link_ids = state_solver->getActiveLinkIds();
+
+  std::vector<tesseract::common::LinkId> cast_ids;
+  std::vector<tesseract::common::LinkId> static_ids;
+  cast_ids.reserve(active_link_ids.size());
+  static_ids.reserve(current_state.link_transforms.size() > active_link_ids.size() ?
+                         current_state.link_transforms.size() - active_link_ids.size() :
+                         0U);
+
   for (const auto& [id, tf] : current_state.link_transforms)
   {
     if (std::find(active_link_ids.begin(), active_link_ids.end(), id) != active_link_ids.end())
-      manager->setCollisionObjectsTransform(id, tf, tf);
+      cast_ids.push_back(id);
     else
-      manager->setCollisionObjectsTransform(id, tf);
+      static_ids.push_back(id);
   }
+
+  manager->setCollisionObjectsTransform(static_ids, current_state.link_transforms);
+  manager->setCollisionObjectsTransform(cast_ids, current_state.link_transforms, current_state.link_transforms);
 
   return manager;
 }
