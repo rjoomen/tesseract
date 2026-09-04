@@ -96,6 +96,18 @@ bool ContinuousContactManager::removeCollisionObjects(const std::vector<tesserac
   return success;
 }
 
+void ContinuousContactManager::setCollisionObjectsEnabled(
+    const std::unordered_map<tesseract::common::LinkId, bool>& enabled)
+{
+  for (const auto& entry : enabled)
+  {
+    if (entry.second)
+      enableCollisionObject(entry.first);
+    else
+      disableCollisionObject(entry.first);
+  }
+}
+
 void ContinuousContactManager::setCollisionObjectsTransform(const std::vector<tesseract::common::LinkId>& ids,
                                                             const tesseract::common::VectorIsometry3d& poses)
 {
@@ -187,6 +199,6 @@ void ContinuousContactManager::applyContactManagerConfig(const ContactManagerCon
 
   setCollisionMarginPairData(config.pair_margin_data, config.pair_margin_override_type);
   applyContactAllowedValidatorOverride(*this, config.acm, config.acm_override_type);
-  applyModifyObjectEnabled(*this, config.modify_object_enabled);
+  setCollisionObjectsEnabled(config.modify_object_enabled);
 }
 }  // namespace tesseract::collision

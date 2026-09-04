@@ -158,6 +158,12 @@ public:
   virtual bool isCollisionObjectEnabled(const tesseract::common::LinkId& id) const = 0;
 
   /**
+   * @brief Enable or disable a batch of collision objects, applying one broadphase update for the batch
+   * @param enabled Map of [link id] to true (enable) or false (disable); ids the manager does not hold are skipped
+   */
+  virtual void setCollisionObjectsEnabled(const std::unordered_map<tesseract::common::LinkId, bool>& enabled);
+
+  /**
    * @brief Set a single collision object's transforms
    * @param id The LinkId of the object
    * @param pose The transformation in world

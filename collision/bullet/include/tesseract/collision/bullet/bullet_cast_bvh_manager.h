@@ -106,6 +106,8 @@ public:
 
   bool isCollisionObjectEnabled(const tesseract::common::LinkId& id) const override final;
 
+  void setCollisionObjectsEnabled(const std::unordered_map<tesseract::common::LinkId, bool>& enabled) override final;
+
   void setCollisionObjectsTransform(const tesseract::common::LinkId& id, const Eigen::Isometry3d& pose) override final;
 
   Eigen::Isometry3d getCollisionObjectsTransform(const tesseract::common::LinkId& id) const override final;
