@@ -243,6 +243,8 @@ public:
    * @param obj1 The first object id. Order doesn't matter
    * @param obj2 The Second object id. Order doesn't matter
    * @param collision_margin contacts with distance < collision_margin are considered in collision
+   * @note Each call re-evaluates the margin of every object in the manager. To set many pairs, build a
+   *       CollisionMarginPairData and use setCollisionMarginPairData, which does that sweep once.
    */
   virtual void setCollisionMarginPair(const tesseract::common::LinkId& id1,
                                       const tesseract::common::LinkId& id2,
