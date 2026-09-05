@@ -175,6 +175,8 @@ TEST(TesseractCollisionBatchedTransformUnit, BulletDiscreteRedundantSetIsInvisib
 }
 
 // The map and array setters delegate to the guarded single-object setter, so both must show the same behaviour.
+// Each call below has to move the boxes for the following assertion to hold, so a setter that never reaches the
+// guarded single-object form fails the test.
 TEST(TesseractCollisionBatchedTransformUnit, BulletDiscreteGuardReachedThroughMapAndArray)  // NOLINT
 {
   BulletDiscreteBVHManager checker;
@@ -183,17 +185,38 @@ TEST(TesseractCollisionBatchedTransformUnit, BulletDiscreteGuardReachedThroughMa
   checker.setActiveCollisionObjects({ tesseract::common::LinkId("box_a"), tesseract::common::LinkId("box_b") });
   checker.setDefaultCollisionMargin(0.0);
 
+  // Park the boxes apart, so the boxes only touch again if a later setter actually moves them.
+  const tesseract::common::LinkIdTransformMap apart{ { tesseract::common::LinkId("box_a"), translated(-10) },
+                                                     { tesseract::common::LinkId("box_b"), translated(10) } };
+  checker.setCollisionObjectsTransform(apart);
+
+  ContactResultMap parked;
+  checker.contactTest(parked, ContactRequest(ContactTestType::ALL));
+  ASSERT_TRUE(parked.empty());
+
   const tesseract::common::LinkIdTransformMap in_contact{ { tesseract::common::LinkId("box_a"), translated(-0.25) },
                                                           { tesseract::common::LinkId("box_b"), translated(0.25) } };
 
   checker.setCollisionObjectsTransform(in_contact);
-  checker.setCollisionObjectsTransform(in_contact);  // redundant, through the map delegate
-  checker.setCollisionObjectsTransform(std::vector<tesseract::common::LinkId>{ "box_a", "box_b" },
-                                       tesseract::common::VectorIsometry3d{ translated(-0.25), translated(0.25) });
+  ContactResultMap through_map;
+  checker.contactTest(through_map, ContactRequest(ContactTestType::ALL));
+  EXPECT_FALSE(through_map.empty());
+  EXPECT_TRUE(
+      checker.getCollisionObjectsTransform(tesseract::common::LinkId("box_a")).isApprox(translated(-0.25), 1e-9));
 
-  ContactResultMap result;
-  checker.contactTest(result, ContactRequest(ContactTestType::ALL));
-  EXPECT_FALSE(result.empty());
+  // The redundant map hits the unchanged-transform guard, which must leave both the pose and the contacts alone.
+  checker.setCollisionObjectsTransform(in_contact);
+  ContactResultMap redundant;
+  checker.contactTest(redundant, ContactRequest(ContactTestType::ALL));
+  EXPECT_EQ(through_map.count(), redundant.count());
+
+  // The array overload has to carry a genuine move all the way to the broadphase.
+  checker.setCollisionObjectsTransform(std::vector<tesseract::common::LinkId>{ "box_a", "box_b" },
+                                       tesseract::common::VectorIsometry3d{ translated(-10), translated(10) });
+  ContactResultMap through_array;
+  checker.contactTest(through_array, ContactRequest(ContactTestType::ALL));
+  EXPECT_TRUE(through_array.empty());
+  EXPECT_TRUE(checker.getCollisionObjectsTransform(tesseract::common::LinkId("box_a")).isApprox(translated(-10), 1e-9));
 }
 
 // The two-pose setter is deliberately unguarded: an update whose pose1 is unchanged and whose pose2 is not must

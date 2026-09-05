@@ -71,6 +71,45 @@
 
 namespace tesseract::environment
 {
+namespace
+{
+/**
+ * @brief Split a state's link transforms into the cast (active) and static halves a continuous manager takes
+ *
+ * The outputs are parallel arrays: ids[i] and poses[i] name the same link. The reserve for the static half
+ * clamps at zero because the state may hold fewer links than the solver reports as active, which the empty
+ * state a freshly built manager is configured from does.
+ */
+void partitionStateByActive(const tesseract::common::LinkIdTransformMap& link_transforms,
+                            const std::vector<tesseract::common::LinkId>& active_link_ids,
+                            std::vector<tesseract::common::LinkId>& cast_ids,
+                            tesseract::common::VectorIsometry3d& cast_poses,
+                            std::vector<tesseract::common::LinkId>& static_ids,
+                            tesseract::common::VectorIsometry3d& static_poses)
+{
+  const std::size_t static_count =
+      link_transforms.size() > active_link_ids.size() ? link_transforms.size() - active_link_ids.size() : 0U;
+  cast_ids.reserve(active_link_ids.size());
+  cast_poses.reserve(active_link_ids.size());
+  static_ids.reserve(static_count);
+  static_poses.reserve(static_count);
+
+  for (const auto& [id, tf] : link_transforms)
+  {
+    if (std::find(active_link_ids.begin(), active_link_ids.end(), id) != active_link_ids.end())
+    {
+      cast_ids.push_back(id);
+      cast_poses.push_back(tf);
+    }
+    else
+    {
+      static_ids.push_back(id);
+      static_poses.push_back(tf);
+    }
+  }
+}
+}  // namespace
+
 EnvironmentContactAllowedValidator::EnvironmentContactAllowedValidator(
     std::shared_ptr<const tesseract::scene_graph::SceneGraph> scene_graph)
   : scene_graph_(std::move(scene_graph))
@@ -649,26 +688,20 @@ void Environment::Implementation::currentStateChanged()
   std::unique_lock<std::shared_mutex> continuous_lock(continuous_manager_mutex);
   if (continuous_manager != nullptr)
   {
-    const std::vector<tesseract::common::LinkId> active_link_ids = state_solver->getActiveLinkIds();
-
     std::vector<tesseract::common::LinkId> cast_ids;
+    tesseract::common::VectorIsometry3d cast_poses;
     std::vector<tesseract::common::LinkId> static_ids;
-    cast_ids.reserve(active_link_ids.size());
-    static_ids.reserve(current_state.link_transforms.size() > active_link_ids.size() ?
-                           current_state.link_transforms.size() - active_link_ids.size() :
-                           0U);
+    tesseract::common::VectorIsometry3d static_poses;
+    partitionStateByActive(current_state.link_transforms,
+                           state_solver->getActiveLinkIds(),
+                           cast_ids,
+                           cast_poses,
+                           static_ids,
+                           static_poses);
 
-    for (const auto& [id, tf] : current_state.link_transforms)
-    {
-      if (std::find(active_link_ids.begin(), active_link_ids.end(), id) != active_link_ids.end())
-        cast_ids.push_back(id);
-      else
-        static_ids.push_back(id);
-    }
-
-    continuous_manager->setCollisionObjectsTransform(static_ids, current_state.link_transforms);
-    continuous_manager->setCollisionObjectsTransform(
-        cast_ids, current_state.link_transforms, current_state.link_transforms);
+    // A state set carries one pose per link, so the cast half sweeps from that pose to itself.
+    continuous_manager->setCollisionObjectsTransform(static_ids, static_poses);
+    continuous_manager->setCollisionObjectsTransform(cast_ids, cast_poses, cast_poses);
   }
 
   {  // Clear JointGroup and KinematicGroup
@@ -1031,25 +1064,16 @@ Environment::Implementation::getContinuousContactManagerHelper(const std::string
 
   manager->setCollisionMarginData(collision_margin_data);
 
-  const std::vector<tesseract::common::LinkId> active_link_ids = state_solver->getActiveLinkIds();
-
   std::vector<tesseract::common::LinkId> cast_ids;
+  tesseract::common::VectorIsometry3d cast_poses;
   std::vector<tesseract::common::LinkId> static_ids;
-  cast_ids.reserve(active_link_ids.size());
-  static_ids.reserve(current_state.link_transforms.size() > active_link_ids.size() ?
-                         current_state.link_transforms.size() - active_link_ids.size() :
-                         0U);
+  tesseract::common::VectorIsometry3d static_poses;
+  partitionStateByActive(
+      current_state.link_transforms, state_solver->getActiveLinkIds(), cast_ids, cast_poses, static_ids, static_poses);
 
-  for (const auto& [id, tf] : current_state.link_transforms)
-  {
-    if (std::find(active_link_ids.begin(), active_link_ids.end(), id) != active_link_ids.end())
-      cast_ids.push_back(id);
-    else
-      static_ids.push_back(id);
-  }
-
-  manager->setCollisionObjectsTransform(static_ids, current_state.link_transforms);
-  manager->setCollisionObjectsTransform(cast_ids, current_state.link_transforms, current_state.link_transforms);
+  // A state carries one pose per link, so the cast half sweeps from that pose to itself.
+  manager->setCollisionObjectsTransform(static_ids, static_poses);
+  manager->setCollisionObjectsTransform(cast_ids, cast_poses, cast_poses);
 
   return manager;
 }

@@ -29,6 +29,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -96,16 +97,25 @@ bool ContinuousContactManager::removeCollisionObjects(const std::vector<tesserac
   return success;
 }
 
-void ContinuousContactManager::setCollisionObjectsEnabled(
+bool ContinuousContactManager::setCollisionObjectsEnabled(
     const std::unordered_map<tesseract::common::LinkId, bool>& enabled)
 {
+  bool success{ true };
   for (const auto& entry : enabled)
-  {
-    if (entry.second)
-      enableCollisionObject(entry.first);
-    else
-      disableCollisionObject(entry.first);
-  }
+    success &= entry.second ? enableCollisionObject(entry.first) : disableCollisionObject(entry.first);
+
+  return success;
+}
+
+bool ContinuousContactManager::setCollisionObjectsEnabled(const std::vector<tesseract::common::LinkId>& ids,
+                                                          bool enabled)
+{
+  std::unordered_map<tesseract::common::LinkId, bool> entries;
+  entries.reserve(ids.size());
+  for (const auto& id : ids)
+    entries[id] = enabled;
+
+  return setCollisionObjectsEnabled(entries);
 }
 
 void ContinuousContactManager::setCollisionObjectsTransform(const std::vector<tesseract::common::LinkId>& ids,
@@ -164,6 +174,14 @@ void ContinuousContactManager::setCollisionObjectsTransform(const std::unordered
   TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses0;
   TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses1;
   gather(ids, state0, scratch_ids, scratch_poses0);
+
+  // One map passed as both endpoints yields two identical pose arrays, so gather it once and pass it twice.
+  if (&state0 == &state1)
+  {
+    setCollisionObjectsTransform(scratch_ids, scratch_poses0, scratch_poses0);
+    return;
+  }
+
   gatherPoses(scratch_ids, state1, scratch_poses1);
   setCollisionObjectsTransform(scratch_ids, scratch_poses0, scratch_poses1);
 }
@@ -176,6 +194,14 @@ void ContinuousContactManager::setCollisionObjectsTransform(const std::vector<te
   TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses0;
   TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses1;
   gather(ids, state0, scratch_ids, scratch_poses0);
+
+  // One map passed as both endpoints yields two identical pose arrays, so gather it once and pass it twice.
+  if (&state0 == &state1)
+  {
+    setCollisionObjectsTransform(scratch_ids, scratch_poses0, scratch_poses0);
+    return;
+  }
+
   gatherPoses(scratch_ids, state1, scratch_poses1);
   setCollisionObjectsTransform(scratch_ids, scratch_poses0, scratch_poses1);
 }

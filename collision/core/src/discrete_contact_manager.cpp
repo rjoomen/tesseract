@@ -29,6 +29,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -85,16 +86,24 @@ bool DiscreteContactManager::removeCollisionObjects(const std::vector<tesseract:
   return success;
 }
 
-void DiscreteContactManager::setCollisionObjectsEnabled(
+bool DiscreteContactManager::setCollisionObjectsEnabled(
     const std::unordered_map<tesseract::common::LinkId, bool>& enabled)
 {
+  bool success{ true };
   for (const auto& entry : enabled)
-  {
-    if (entry.second)
-      enableCollisionObject(entry.first);
-    else
-      disableCollisionObject(entry.first);
-  }
+    success &= entry.second ? enableCollisionObject(entry.first) : disableCollisionObject(entry.first);
+
+  return success;
+}
+
+bool DiscreteContactManager::setCollisionObjectsEnabled(const std::vector<tesseract::common::LinkId>& ids, bool enabled)
+{
+  std::unordered_map<tesseract::common::LinkId, bool> entries;
+  entries.reserve(ids.size());
+  for (const auto& id : ids)
+    entries[id] = enabled;
+
+  return setCollisionObjectsEnabled(entries);
 }
 
 void DiscreteContactManager::setCollisionObjectsTransform(const std::vector<tesseract::common::LinkId>& ids,
