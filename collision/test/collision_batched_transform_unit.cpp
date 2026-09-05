@@ -131,6 +131,116 @@ TEST(TesseractCollisionBatchedTransformUnit, FCLArraySetterSizeMismatchThrows)  
   EXPECT_THROW(checker.setCollisionObjectsTransform(ids, poses), std::runtime_error);  // NOLINT
 }
 
+namespace
+{
+Eigen::Isometry3d translated(double x)
+{
+  Eigen::Isometry3d tf{ Eigen::Isometry3d::Identity() };
+  tf.translation() = Eigen::Vector3d(x, 0, 0);
+  return tf;
+}
+}  // namespace
+
+// Re-setting an identical transform must be a no-op that is invisible from outside: same stored pose, same contacts.
+TEST(TesseractCollisionBatchedTransformUnit, BulletDiscreteRedundantSetIsInvisible)  // NOLINT
+{
+  BulletDiscreteBVHManager checker;
+  addBox(checker, tesseract::common::LinkId("box_a"));
+  addBox(checker, tesseract::common::LinkId("box_b"));
+  checker.setActiveCollisionObjects({ tesseract::common::LinkId("box_a"), tesseract::common::LinkId("box_b") });
+  checker.setDefaultCollisionMargin(0.0);
+
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_a"), translated(-0.25));
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_b"), translated(0.25));
+
+  ContactResultMap before;
+  checker.contactTest(before, ContactRequest(ContactTestType::ALL));
+  EXPECT_FALSE(before.empty());
+
+  // The guarded path: same value again, three times.
+  for (int i = 0; i < 3; ++i)
+    checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_a"), translated(-0.25));
+
+  ContactResultMap after;
+  checker.contactTest(after, ContactRequest(ContactTestType::ALL));
+  EXPECT_EQ(before.count(), after.count());
+  EXPECT_TRUE(
+      checker.getCollisionObjectsTransform(tesseract::common::LinkId("box_a")).isApprox(translated(-0.25), 1e-9));
+
+  // A genuinely new transform must still take effect, through the broadphase and not just the stored pose.
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_a"), translated(-10));
+  ContactResultMap moved;
+  checker.contactTest(moved, ContactRequest(ContactTestType::ALL));
+  EXPECT_TRUE(moved.empty());
+}
+
+// The map and array setters delegate to the guarded single-object setter, so both must show the same behaviour.
+TEST(TesseractCollisionBatchedTransformUnit, BulletDiscreteGuardReachedThroughMapAndArray)  // NOLINT
+{
+  BulletDiscreteBVHManager checker;
+  addBox(checker, tesseract::common::LinkId("box_a"));
+  addBox(checker, tesseract::common::LinkId("box_b"));
+  checker.setActiveCollisionObjects({ tesseract::common::LinkId("box_a"), tesseract::common::LinkId("box_b") });
+  checker.setDefaultCollisionMargin(0.0);
+
+  const tesseract::common::LinkIdTransformMap in_contact{ { tesseract::common::LinkId("box_a"), translated(-0.25) },
+                                                          { tesseract::common::LinkId("box_b"), translated(0.25) } };
+
+  checker.setCollisionObjectsTransform(in_contact);
+  checker.setCollisionObjectsTransform(in_contact);  // redundant, through the map delegate
+  checker.setCollisionObjectsTransform(std::vector<tesseract::common::LinkId>{ "box_a", "box_b" },
+                                       tesseract::common::VectorIsometry3d{ translated(-0.25), translated(0.25) });
+
+  ContactResultMap result;
+  checker.contactTest(result, ContactRequest(ContactTestType::ALL));
+  EXPECT_FALSE(result.empty());
+}
+
+// The two-pose setter is deliberately unguarded: an update whose pose1 is unchanged and whose pose2 is not must
+// still rebuild the swept hull. Guarding it on pose1 makes this fail, because the sweep never happens and nothing
+// crosses box_b.
+TEST(TesseractCollisionBatchedTransformUnit, BulletCastUnchangedPose1StillSweeps)  // NOLINT
+{
+  BulletCastBVHManager checker;
+  addBox(checker, tesseract::common::LinkId("box_a"));
+  addBox(checker, tesseract::common::LinkId("box_b"));
+  checker.setActiveCollisionObjects({ tesseract::common::LinkId("box_a") });
+  checker.setDefaultCollisionMargin(0.0);
+
+  // First sweep: a short move that stays clear of box_b at the origin.
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_a"), translated(-5), translated(-4));
+  ContactResultMap clear_result;
+  checker.contactTest(clear_result, ContactRequest(ContactTestType::ALL));
+  EXPECT_TRUE(clear_result.empty());
+
+  // Second sweep: same pose1, a pose2 that crosses the origin.
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_a"), translated(-5), translated(5));
+  ContactResultMap swept_result;
+  checker.contactTest(swept_result, ContactRequest(ContactTestType::ALL));
+  EXPECT_FALSE(swept_result.empty());
+}
+
+// The cast manager's one-pose setter is guarded, and for a kinematic link the broadphase proxy lives on the cast
+// cow rather than the regular one. A redundant one-pose set on a static link must remain invisible.
+TEST(TesseractCollisionBatchedTransformUnit, BulletCastRedundantOnePoseSetIsInvisible)  // NOLINT
+{
+  BulletCastBVHManager checker;
+  addBox(checker, tesseract::common::LinkId("box_a"));
+  addBox(checker, tesseract::common::LinkId("box_b"));
+  checker.setActiveCollisionObjects({ tesseract::common::LinkId("box_a") });  // box_b is static
+  checker.setDefaultCollisionMargin(0.0);
+
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_b"), translated(0.25));
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_b"), translated(0.25));  // guarded
+  checker.setCollisionObjectsTransform(tesseract::common::LinkId("box_a"), translated(-0.25), translated(-0.25));
+
+  ContactResultMap result;
+  checker.contactTest(result, ContactRequest(ContactTestType::ALL));
+  EXPECT_FALSE(result.empty());
+  EXPECT_TRUE(
+      checker.getCollisionObjectsTransform(tesseract::common::LinkId("box_b")).isApprox(translated(0.25), 1e-9));
+}
+
 int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);

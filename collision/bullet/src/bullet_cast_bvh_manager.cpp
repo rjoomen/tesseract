@@ -325,6 +325,12 @@ void BulletCastBVHManager::setCollisionObjectsTransform(const tesseract::common:
   if (it != link2cow_.end())
   {
     COW::Ptr& cow = it->second;
+
+    // Note: If the transform has not changed do not update to prevent unnecessary broadphase AABB updates
+    const Eigen::Isometry3d cur_tf = convertBtToEigen(cow->getWorldTransform());
+    if (cur_tf.translation().isApprox(pose.translation(), 1e-8) && cur_tf.rotation().isApprox(pose.rotation(), 1e-8))
+      return;
+
     btTransform tf = convertEigenToBt(pose);
     cow->setWorldTransform(tf);
     link2castcow_[id]->setWorldTransform(tf);
