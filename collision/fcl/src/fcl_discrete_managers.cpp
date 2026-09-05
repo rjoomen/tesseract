@@ -77,7 +77,7 @@ DiscreteContactManager::UPtr FCLDiscreteBVHManager::clone() const
   // opposite sign to its source, 1.7e-3 and 3.0e-3 apart against the clone suite's 1e-3 tolerance, while the
   // distance, the nearest points and the dominant normal component all still agree. The order the objects are
   // reported in is not what is at stake here - that survives either way.
-  manager->addCollisionObjects(cows, /*defer_update=*/false);
+  manager->addCollisionObjects(cows);
 
   manager->setActiveCollisionObjects(active_);
   manager->setCollisionMarginData(collision_margin_data_);
@@ -152,7 +152,7 @@ bool FCLDiscreteBVHManager::addCollisionObjects(const std::vector<CollisionObjec
   removeCollisionObjects(displaced);
 
   if (!cows.empty())
-    addCollisionObjects(cows, /*defer_update=*/false);
+    addCollisionObjects(cows);
 
   return success;
 }
@@ -505,7 +505,7 @@ void FCLDiscreteBVHManager::addCollisionObject(const COW::Ptr& cow)
   addCollisionObjects(std::vector<COW::Ptr>{ cow });
 }
 
-void FCLDiscreteBVHManager::addCollisionObjects(const std::vector<COW::Ptr>& cows, bool defer_update)
+void FCLDiscreteBVHManager::addCollisionObjects(const std::vector<COW::Ptr>& cows)
 {
   for (const auto& cow : cows)
   {
@@ -535,12 +535,9 @@ void FCLDiscreteBVHManager::addCollisionObjects(const std::vector<COW::Ptr>& cow
   static_update_.reserve(fcl_co_count_);
   dynamic_update_.reserve(fcl_co_count_);
 
-  if (!defer_update)
-  {
-    // This causes a refit on the bvh tree.
-    dynamic_manager_->update();
-    static_manager_->update();
-  }
+  // This causes a refit on the bvh tree.
+  dynamic_manager_->update();
+  static_manager_->update();
 }
 
 void FCLDiscreteBVHManager::onCollisionMarginDataChanged()

@@ -158,14 +158,12 @@ private:
    *             objects are registered with the broadphase and the order getCollisionObjects()
    *             reports, so a caller reproducing another manager's contents must supply them in
    *             that manager's order.
-   * @param defer_update When true, skips the broadphase update — the caller is responsible for
-   *                     calling setActiveCollisionObjects or similar before querying.
    * @pre None of the links in @p cows are already present in the manager. Overwriting an existing
    *      link destroys its previous wrapper while that wrapper's collision objects may still be
    *      registered in a broadphase manager, and leaves a stale duplicate in the collision-objects
    *      list.
    */
-  void addCollisionObjects(const std::vector<fcl_internal::COW::Ptr>& cows, bool defer_update = false);
+  void addCollisionObjects(const std::vector<fcl_internal::COW::Ptr>& cows);
 
   std::string name_;
 
