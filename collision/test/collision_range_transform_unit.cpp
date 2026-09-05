@@ -188,6 +188,47 @@ TEST(TesseractCollisionRangeTransformUnit, CastMissingIdInSecondMapThrowsNamingT
   }
 }
 
+TEST(TesseractCollisionRangeTransformUnit, BothBaseClassesThrowTheSameMessage)  // NOLINT
+{
+  // The discrete and continuous base classes each carry their own copy of the id-to-pose gather. A caller must get
+  // the same diagnostic whichever one it went through, so the two messages are compared against each other rather
+  // than matched against a pattern: a reworded message in one copy alone fails here.
+  const LinkIdTransformMap state{ { LinkId("box_a"), at(-0.25) } };  // box_b absent
+
+  std::string discrete_what;
+  {
+    BulletDiscreteBVHManager checker;
+    setup(checker);
+    try
+    {
+      checker.setCollisionObjectsTransform(std::vector<LinkId>{ "box_a", "box_b" }, state);
+      FAIL() << "expected std::out_of_range";
+    }
+    catch (const std::out_of_range& e)
+    {
+      discrete_what = e.what();
+    }
+  }
+
+  std::string continuous_what;
+  {
+    BulletCastBVHManager checker;
+    setup(checker);
+    try
+    {
+      checker.setCollisionObjectsTransform(std::vector<LinkId>{ "box_a", "box_b" }, state);
+      FAIL() << "expected std::out_of_range";
+    }
+    catch (const std::out_of_range& e)
+    {
+      continuous_what = e.what();
+    }
+  }
+
+  EXPECT_FALSE(discrete_what.empty());
+  EXPECT_EQ(discrete_what, continuous_what);
+}
+
 int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);

@@ -36,32 +36,22 @@
 namespace
 {
 /**
- * @brief Look up a link's transform
- * @throws std::out_of_range naming the link if it is absent
+ * @brief Look up @p ids against @p state, writing one pose per id in the order given
+ * @throws std::out_of_range naming the link, if any of @p ids is absent from @p state
  */
-const Eigen::Isometry3d& lookup(const tesseract::common::LinkIdTransformMap& state, const tesseract::common::LinkId& id)
+void gatherPoses(const std::vector<tesseract::common::LinkId>& ids,
+                 const tesseract::common::LinkIdTransformMap& state,
+                 tesseract::common::VectorIsometry3d& out_poses)
 {
-  auto it = state.find(id);
-  if (it == state.end())
-    throw std::out_of_range("setCollisionObjectsTransform, link '" + id.name() + "' is absent from the state");
-
-  return it->second;
-}
-
-template <typename IdRange>
-void gather(const IdRange& ids,
-            const tesseract::common::LinkIdTransformMap& state,
-            std::vector<tesseract::common::LinkId>& out_ids,
-            tesseract::common::VectorIsometry3d& out_poses)
-{
-  out_ids.clear();
   out_poses.clear();
-  out_ids.reserve(ids.size());
   out_poses.reserve(ids.size());
   for (const auto& id : ids)
   {
-    out_ids.push_back(id);
-    out_poses.push_back(lookup(state, id));
+    auto it = state.find(id);
+    if (it == state.end())
+      throw std::out_of_range("setCollisionObjectsTransform, link '" + id.name() + "' is absent from the state");
+
+    out_poses.push_back(it->second);
   }
 }
 }  // namespace
@@ -125,17 +115,17 @@ void DiscreteContactManager::setCollisionObjectsTransform(const std::unordered_s
 {
   TESSERACT_THREAD_LOCAL std::vector<tesseract::common::LinkId> scratch_ids;
   TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses;
-  gather(ids, state, scratch_ids, scratch_poses);
+  scratch_ids.assign(ids.begin(), ids.end());
+  gatherPoses(scratch_ids, state, scratch_poses);
   setCollisionObjectsTransform(scratch_ids, scratch_poses);
 }
 
 void DiscreteContactManager::setCollisionObjectsTransform(const std::vector<tesseract::common::LinkId>& ids,
                                                           const tesseract::common::LinkIdTransformMap& state)
 {
-  TESSERACT_THREAD_LOCAL std::vector<tesseract::common::LinkId> scratch_ids;
   TESSERACT_THREAD_LOCAL tesseract::common::VectorIsometry3d scratch_poses;
-  gather(ids, state, scratch_ids, scratch_poses);
-  setCollisionObjectsTransform(scratch_ids, scratch_poses);
+  gatherPoses(ids, state, scratch_poses);
+  setCollisionObjectsTransform(ids, scratch_poses);
 }
 
 void DiscreteContactManager::setActiveCollisionObjects(const std::vector<tesseract::common::LinkId>& ids)
