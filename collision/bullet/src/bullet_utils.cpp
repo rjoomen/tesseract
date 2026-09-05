@@ -1602,11 +1602,9 @@ struct CleanProxySetCallback : public btOverlapCallback
   btOverlappingPairCache* pair_cache_;
   btDispatcher* dispatcher_;
 };
-}  // namespace
 
-void removeCollisionObjectsFromBroadphase(const std::vector<COW::Ptr>& cows,
-                                          const std::unique_ptr<btBroadphaseInterface>& broadphase,
-                                          const std::unique_ptr<btCollisionDispatcher>& dispatcher)
+/** @brief Collect the broadphase proxies of @p cows, skipping any object that has no handle */
+std::unordered_set<const btBroadphaseProxy*> collectProxies(const std::vector<COW::Ptr>& cows)
 {
   std::unordered_set<const btBroadphaseProxy*> proxies;
   proxies.reserve(cows.size());
@@ -1616,6 +1614,15 @@ void removeCollisionObjectsFromBroadphase(const std::vector<COW::Ptr>& cows,
       proxies.insert(cow->getBroadphaseHandle());
   }
 
+  return proxies;
+}
+}  // namespace
+
+void removeCollisionObjectsFromBroadphase(const std::vector<COW::Ptr>& cows,
+                                          const std::unique_ptr<btBroadphaseInterface>& broadphase,
+                                          const std::unique_ptr<btCollisionDispatcher>& dispatcher)
+{
+  const std::unordered_set<const btBroadphaseProxy*> proxies = collectProxies(cows);
   if (proxies.empty())
     return;
 
@@ -1639,14 +1646,7 @@ void cleanCollisionObjectsFromPairs(const std::vector<COW::Ptr>& cows,
                                     const std::unique_ptr<btBroadphaseInterface>& broadphase,
                                     const std::unique_ptr<btCollisionDispatcher>& dispatcher)
 {
-  std::unordered_set<const btBroadphaseProxy*> proxies;
-  proxies.reserve(cows.size());
-  for (const auto& cow : cows)
-  {
-    if (cow->getBroadphaseHandle() != nullptr)
-      proxies.insert(cow->getBroadphaseHandle());
-  }
-
+  const std::unordered_set<const btBroadphaseProxy*> proxies = collectProxies(cows);
   if (proxies.empty())
     return;
 
