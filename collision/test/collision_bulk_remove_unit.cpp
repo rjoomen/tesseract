@@ -32,6 +32,16 @@ void addBox(ManagerType& checker, const LinkId& id, const Eigen::Isometry3d& pos
   tesseract::common::VectorIsometry3d poses{ pose };
   checker.addCollisionObject(id, 0, shapes, poses, true);
 }
+
+/** @brief The two names joined lowest first, so the key does not depend on which side of a pair a backend reports */
+std::string pairKey(const std::string& a, const std::string& b)
+{
+  const bool ordered = a < b;
+  std::string key = ordered ? a : b;
+  key.append("|");
+  key.append(ordered ? b : a);
+  return key;
+}
 }  // namespace
 
 template <typename ManagerType>
@@ -162,11 +172,7 @@ void runBulkRemoveMixedRoutingTest()
   // it, not the name that entry carries.
   std::set<std::string> pairs;
   for (const auto& contact : flat)
-  {
-    const std::string first = contact.link_ids[0].name();
-    const std::string second = contact.link_ids[1].name();
-    pairs.insert((first < second) ? (first + "|" + second) : (second + "|" + first));
-  }
+    pairs.insert(pairKey(contact.link_ids[0].name(), contact.link_ids[1].name()));
 
   EXPECT_EQ(pairs, std::set<std::string>{ "kinematic_kept|static_kept" });
 }
