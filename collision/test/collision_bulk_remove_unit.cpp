@@ -8,6 +8,7 @@ TESSERACT_COMMON_IGNORE_WARNINGS_PUSH
 #include <vector>
 TESSERACT_COMMON_IGNORE_WARNINGS_POP
 
+#include <tesseract/collision/bullet/bullet_cast_bvh_manager.h>
 #include <tesseract/collision/bullet/bullet_discrete_bvh_manager.h>
 #include <tesseract/collision/fcl/fcl_discrete_managers.h>
 #include <tesseract/geometry/impl/box.h>
@@ -177,9 +178,14 @@ void runBulkRemoveMixedRoutingTest()
   EXPECT_EQ(pairs, std::set<std::string>{ "kinematic_kept|static_kept" });
 }
 
-TEST(TesseractCollisionBulkRemoveUnit, BulletEquivalence)  // NOLINT
+TEST(TesseractCollisionBulkRemoveUnit, BulletDiscreteEquivalence)  // NOLINT
 {
   runBulkRemoveEquivalenceTest<BulletDiscreteBVHManager>();
+}
+
+TEST(TesseractCollisionBulkRemoveUnit, BulletCastEquivalence)  // NOLINT
+{
+  runBulkRemoveEquivalenceTest<BulletCastBVHManager>();
 }
 
 TEST(TesseractCollisionBulkRemoveUnit, FCLEquivalence)  // NOLINT
@@ -187,9 +193,14 @@ TEST(TesseractCollisionBulkRemoveUnit, FCLEquivalence)  // NOLINT
   runBulkRemoveEquivalenceTest<FCLDiscreteBVHManager>();
 }
 
-TEST(TesseractCollisionBulkRemoveUnit, BulletPartial)  // NOLINT
+TEST(TesseractCollisionBulkRemoveUnit, BulletDiscretePartial)  // NOLINT
 {
   runBulkRemovePartialTest<BulletDiscreteBVHManager>();
+}
+
+TEST(TesseractCollisionBulkRemoveUnit, BulletCastPartial)  // NOLINT
+{
+  runBulkRemovePartialTest<BulletCastBVHManager>();
 }
 
 TEST(TesseractCollisionBulkRemoveUnit, FCLPartial)  // NOLINT
@@ -197,9 +208,14 @@ TEST(TesseractCollisionBulkRemoveUnit, FCLPartial)  // NOLINT
   runBulkRemovePartialTest<FCLDiscreteBVHManager>();
 }
 
-TEST(TesseractCollisionBulkRemoveUnit, BulletLeavesBroadphase)  // NOLINT
+TEST(TesseractCollisionBulkRemoveUnit, BulletDiscreteLeavesBroadphase)  // NOLINT
 {
   runBulkRemoveLeavesBroadphaseTest<BulletDiscreteBVHManager>();
+}
+
+TEST(TesseractCollisionBulkRemoveUnit, BulletCastLeavesBroadphase)  // NOLINT
+{
+  runBulkRemoveLeavesBroadphaseTest<BulletCastBVHManager>();
 }
 
 TEST(TesseractCollisionBulkRemoveUnit, FCLLeavesBroadphase)  // NOLINT
@@ -207,9 +223,14 @@ TEST(TesseractCollisionBulkRemoveUnit, FCLLeavesBroadphase)  // NOLINT
   runBulkRemoveLeavesBroadphaseTest<FCLDiscreteBVHManager>();
 }
 
-TEST(TesseractCollisionBulkRemoveUnit, BulletRemoveAllThenReuse)  // NOLINT
+TEST(TesseractCollisionBulkRemoveUnit, BulletDiscreteRemoveAllThenReuse)  // NOLINT
 {
   runBulkRemoveAllThenReuseTest<BulletDiscreteBVHManager>();
+}
+
+TEST(TesseractCollisionBulkRemoveUnit, BulletCastRemoveAllThenReuse)  // NOLINT
+{
+  runBulkRemoveAllThenReuseTest<BulletCastBVHManager>();
 }
 
 TEST(TesseractCollisionBulkRemoveUnit, FCLRemoveAllThenReuse)  // NOLINT
@@ -217,9 +238,14 @@ TEST(TesseractCollisionBulkRemoveUnit, FCLRemoveAllThenReuse)  // NOLINT
   runBulkRemoveAllThenReuseTest<FCLDiscreteBVHManager>();
 }
 
-TEST(TesseractCollisionBulkRemoveUnit, BulletRepeatedId)  // NOLINT
+TEST(TesseractCollisionBulkRemoveUnit, BulletDiscreteRepeatedId)  // NOLINT
 {
   runBulkRemoveRepeatedIdTest<BulletDiscreteBVHManager>();
+}
+
+TEST(TesseractCollisionBulkRemoveUnit, BulletCastRepeatedId)  // NOLINT
+{
+  runBulkRemoveRepeatedIdTest<BulletCastBVHManager>();
 }
 
 TEST(TesseractCollisionBulkRemoveUnit, FCLRepeatedId)  // NOLINT
@@ -227,9 +253,14 @@ TEST(TesseractCollisionBulkRemoveUnit, FCLRepeatedId)  // NOLINT
   runBulkRemoveRepeatedIdTest<FCLDiscreteBVHManager>();
 }
 
-TEST(TesseractCollisionBulkRemoveUnit, BulletMixedRouting)  // NOLINT
+TEST(TesseractCollisionBulkRemoveUnit, BulletDiscreteMixedRouting)  // NOLINT
 {
   runBulkRemoveMixedRoutingTest<BulletDiscreteBVHManager>();
+}
+
+TEST(TesseractCollisionBulkRemoveUnit, BulletCastMixedRouting)  // NOLINT
+{
+  runBulkRemoveMixedRoutingTest<BulletCastBVHManager>();
 }
 
 TEST(TesseractCollisionBulkRemoveUnit, FCLMixedRouting)  // NOLINT
